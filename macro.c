@@ -32,6 +32,8 @@
 #include <unistd.h>
 #include <sys/types.h>
 
+#include <pwd.h>
+
 //
 // Function declarations
 //
@@ -180,17 +182,44 @@ static char *alias_find(char *cmd) {
 
 // Check for an ini file and open it, if so.
 static int ini_file() {
-    int fd = open("macro.ini", O_RDONLY);
-    if (fd < 0) {
-        if (errno == ENOENT) {              // no such file?
-            fd = 0;
+    #define FD_LIST_NR 2
+    int fd[FD_LIST_NR];
+
+    // fd 0 for current dir config
+    fd[0] = open("macro.ini", O_RDONLY);
+
+    // fd 1 for home dir config
+    struct passwd *pw = getpwuid(getuid());
+    char home_path[1024];
+    if (pw == NULL) {
+        fprintf(stderr, "macro: problem getting home directory\n");
+        // exit(1);
+    } else {
+        snprintf(home_path, sizeof(home_path), "%s/.macro.ini", pw->pw_dir);
+    }
+    fd[1] = open(home_path, O_RDONLY);
+
+    printf("%d", fd[1]);
+    
+    // check which file to use
+    int ret = 0 ;
+    int i = 0;
+    for ( int i = 0 ; i < FD_LIST_NR ; i++ ) {
+        if ( fd[i] < 0 ) {
+            // fd not valid
+            continue ;
+        } else if ( ret == 0  ) {
+            // first vaild fd( >0 ), record it to ret
+            ret = fd[i] ;
+            // break;
         } else {
-            char *err = strerror(errno);
-            fprintf(stderr, "macro: problem reading \"macro.ini\": %s\n", err);
-            exit(1);
+            // 2nd,3rd,4th ... valid fd, close it
+            close(fd[i]);
         }
     }
-    return fd;
+
+    // close unused file
+    return ret;
 }
 
 // Parse command line arguments
