@@ -1,0 +1,186 @@
+<html>
+ <head>
+  <title>Alias / Macro Support for JDB (Java Debugger) and Other Command Line Programs</title>
+  <meta name="author" content="Geoff Mottram" />
+  <meta name="keywords" content="alias, macro, jdb" />
+ </head>
+ <body text="#000000" bgcolor="#FFFFFF"><blockquote>
+  <p>
+   <b>
+    <h2>Alias / Macro Support for JDB (Java Debugger) and Other Command Line Programs</h2>
+   </b>
+  </p>
+
+  <p>Copyright (c) 2022, Geoff Mottram<br />
+  All rights reserved.</p>
+
+  <p>Redistribution and use in source and binary forms, with or without modification,
+  are permitted provided that the following conditions are met:</p>
+
+  <p>1. Redistributions of source code must retain the above copyright notice,
+  this list of conditions and the following disclaimer.</p>
+
+  <p>2. Redistributions in binary form must reproduce the above copyright notice,
+  this list of conditions and the following disclaimer in the documentation
+  and/or other materials provided with the distribution.</p>
+
+  <p>THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+  IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
+  INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+  BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+  DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+  LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+  OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF
+  ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.</p>
+
+	<h3>Contact: geoff at minaret dot biz</h3>
+
+  <h3>Keywords: alias, macro, jdb</h3>
+
+  <h3>Contents</h3>
+  <blockquote>
+   <a href="#intro">Introduction</a><br />
+   <a href="#using">Using <code>macro</code></a><br />
+   <a href="#install">Installing and Compiling <code>macro</code></a><br />
+   <a href="#debug">Debugging a Java Program with <code>macro</code></a>
+  </blockquote>
+
+  <h3><a name="intro">Introduction</a></h3>
+  <p>
+  <code>macro</code> was written to solve a simple problem: the Java Debugger
+   (jdb) is such an excellent tool but doesn't support single-letter commands or
+   command repetition (pressing the ENTER key to repeat the last command).</p>
+
+  <p><code>macro</code> can be used as a front end to any interactive command line
+  program (the target program) which reads from standard input.
+	<code>macro</code> provides an alias substitution mechanism on the first word of the input line.
+  The subsituted line is sent to the standard input of the target program.</p>
+
+  <p>By default, <code>macro</code> supports command repetition whereby
+  if you input a blank line (press ENTER and nothing else), the last
+  line that was sent to the target program is resent.</p>
+
+  <h3><a name="using">Using macro</a></h3>
+  <p><code>macro</code> is invoked as follows:</p>
+	<blockquote>
+  <pre>
+Usage: macro [-rv] PROGRAM ARGS...
+Where: -r Turn off ENTER key repeats last command
+       -v Verbose output (debugging aid)
+</pre>
+	</blockquote>
+<p>
+The -r option will turn off command repetition for
+target programs that already support this feature or
+when you just don't want this behavior.</p>
+
+<p>The -v option may be useful if you are trying to use <code>macro</code>
+with a progam other than <code>jdb</code> and it doesn't seem to work.
+The most likely cause of failure will be programs that insist that standard
+input be a terminal (by calling something like <code>isatty()</code>).</p>
+
+
+  <p>The following <code>macro</code> commands are not forwarded to the
+	target program:</p>
+	<blockquote>
+  <dl>
+      <dt>alias</dt>
+      <dd>List all defined aliases.</dd><br />
+
+      <dt>alias NAME=SUBSTITUTION</dt>
+      <dd>Define the alias <code>NAME</code> to mean <code>SUBSTITUTION</code>
+	(which can be any string).<br />
+	Unlike the Linux shell, quotation marks are not used when defining an alias
+	unless you want them to be part of the alias.<br />
+      	The <code>=</code> sign is required.</dd><br />
+
+      <dt>unalias NAME</dt>
+      <dd>Remove the alias <code>NAME</code>.</dd>
+  </dl>
+	</blockquote>
+
+  <p>When <code>macro</code> starts running, it reads and executes the
+  contents of "macro.ini" in the current directory as if
+  you had typed the lines yourself. This is the fastest
+  way to define a set of aliases to use with the target
+  program. Any lines that do not contain a <code>macro</code> command
+  are passed onto the target program. Lines that start with a <code>#</code>
+  are comments and are ignored.</p>
+
+  <p>The distributed "macro.ini" file is written to be used with <code>jdb</code>
+	and defines the following single-letter aliases (note that the <code>alias</code>
+	command itself has been given an alias of <code>a</code>):</p>
+<blockquote>
+<pre>
+alias a=alias
+a c=cont
+a d=dump
+a h=help
+a n=next
+a p=print
+a q=quit
+a r=run
+a s=step
+a w=where
+</pre>
+</blockquote>
+
+
+  <h3><a name="install">Installing and Compiling macro</a></h3>
+  <p>
+  <code>macro</code> is a "C" program that runs under Linux. Download the source code zip
+	file here:</p>
+  <blockquote><h4><a href="macro.zip">macro.zip</a></h4>
+		  Checksums: <a href="macro.sha256sum">sha256sum</a> |
+		  <a href="macro.md5sum">md5sum</a></blockquote>
+	<p>
+	After you unzip the contents of the zip file to a local directory,
+	compile the program by running the following command:</p>
+	<blockquote>sh compile.sh</blockquote>
+	</p>
+	<p>The executable will be called <code>macro</code>. Copy this file so that it is in your executable
+	path (such as <code>~/bin</code> or <code>/usr/local/bin</code>, etc.).</p>
+
+  <h3><a name="debug">Debugging a Java Program with macro</a></h3>
+  <p>
+	Whether the program you want to debug is a command line program (which will be reading
+	from and writing to the console) or not, it is usually easiest to run your program
+	in one terminal window and <code>jdb</code> in another.</p>
+
+	<p>The following command will prepare your program for debugging without actually running it:
+	<blockquote><pre>java -Xmx100m -Xdebug -Xnoagent -Djava.compiler=NONE -Xrunjdwp:transport=dt_socket,address=8008,server=y,suspend=y CLASS_NAME $@</pre></blockquote>
+
+	<p>Where <code>CLASS_NAME</code> is the name of the Java Class with <code>main()</code>. The <code>suspend=y</code> option tells Java to not run the program just yet.</p>
+
+	<p>In a separate window, start the Java debugger as follows:</p>
+	<blockquote><pre>macro jdb -sourcepath SOURCE_DIR -attach localhost:8008</pre></blockquote>
+
+	<p>Where <code>SOURCE_DIR</code> is the directory where your source code is located.
+	The <code>-sourcepath</code> option is only necessary if you are using package names and
+	your current directory isn't the top-level package directory.</p>
+
+	<p>Make sure you copy the file "macro.ini" from the <code>macro</code> installation
+	directory to your current directory before you run the <code>macro</code> command.
+	Create a <code>jdb.ini</code> file in your current directory if you will be running
+	<code>jdb</code> more than once to define your usual breakpoints using <code>stop in</code>
+	and <code>stop at</code>.</p>
+
+	<p>Start the program you are debugging with <code>r</code> (run), single step with either <code>s</code>
+	(step into) or <code>n</code> (next / step over), print variables with <code>p</code>
+	and exit with <code>q</code> (quit).</p>
+
+	<p><b>Tip:</b> It is often easiest to create a temporary Java method in your code called
+	<code>debug()</code> and call it from some place in your code where you want the program
+	to stop. This way, you don't have to worry about line numbers in your break points. Next,
+	set a breakpoint with the <code>jdb</code> command <code>stop in CLASS_NAME.debug</code>.</p>
+
+	<p><b>Tip:</b> The <code>jdb</code> <code>print</code> command calls the <code>toString()</code>
+	method of the object being printed. Override the <code>toString()</code> method 
+	in your objects to add any custom debugging information you want to see easily when
+	debugging your program.</p>
+
+ <p><center><font size="-1"><a href="index.html">Technical Tips</a></font></center></p>
+ </body>
+</html>
