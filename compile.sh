@@ -1,2 +1,2 @@
 #!/bin/sh
-cc -s -O2 macro.c -o macro
+gcc macro.c -s -O2 -lreadline -o macro
