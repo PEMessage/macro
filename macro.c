@@ -182,44 +182,36 @@ static char *alias_find(char *cmd) {
 
 // Check for an ini file and open it, if so.
 static int ini_file() {
-    #define FD_LIST_NR 2
-    int fd[FD_LIST_NR];
+    char *home_path = getpwuid(getuid())->pw_dir;
 
-    // fd 0 for current dir config
-    fd[0] = open("macro.ini", O_RDONLY);
+    #define INI_PATH_MAXLENGTH 1024
+    #define INI_PATH_NR 3
 
-    // fd 1 for home dir config
-    struct passwd *pw = getpwuid(getuid());
-    char home_path[1024];
-    if (pw == NULL) {
-        fprintf(stderr, "macro: problem getting home directory\n");
-        // exit(1);
-    } else {
-        snprintf(home_path, sizeof(home_path), "%s/.macro.ini", pw->pw_dir);
-    }
-    fd[1] = open(home_path, O_RDONLY);
+    char ini_path[INI_PATH_NR][INI_PATH_MAXLENGTH];
+    snprintf(ini_path[0], sizeof(ini_path[0]), "./macro.ini");
+    snprintf(ini_path[1], sizeof(ini_path[1]), "%s/.macro.ini", home_path);
+    snprintf(ini_path[2], sizeof(ini_path[2]), "%s/.config/macro/macro.ini", home_path);
 
-    printf("%d", fd[1]);
-    
-    // check which file to use
-    int ret = 0 ;
-    int i = 0;
-    for ( int i = 0 ; i < FD_LIST_NR ; i++ ) {
-        if ( fd[i] < 0 ) {
-            // fd not valid
-            continue ;
-        } else if ( ret == 0  ) {
-            // first vaild fd( >0 ), record it to ret
-            ret = fd[i] ;
-            // break;
+    int fd = 0;
+
+    for (size_t i = 0; i < sizeof(ini_path) / sizeof(ini_path[0]); i++) {
+        fd = open(ini_path[i], O_RDONLY);
+        if (fd < 0) {
+            if (errno == ENOENT) {
+                continue ;
+            } else {
+                // char *err = strerror(errno);                                         
+                // fprintf(stderr, "macro: problem reading \"macro.ini\": %s\n", err);  
+                // exit(1);
+                printf("Not using ini: '%s'", ini_path[i]);
+            }
         } else {
-            // 2nd,3rd,4th ... valid fd, close it
-            close(fd[i]);
+            printf("using ini: '%s'", ini_path[i]);
+            return fd;
         }
     }
-
-    // close unused file
-    return ret;
+    fprintf(stderr, "macro: problem reading ini");  
+    exit(1);
 }
 
 // Parse command line arguments
