@@ -33,6 +33,8 @@
 #include <sys/types.h>
 
 #include <pwd.h>
+#include <readline/readline.h>
+#include <readline/history.h>
 
 //
 // Function declarations
@@ -279,161 +281,123 @@ static int init(int argc, char **argv) {
 int main(int argc, char **argv) {
     int fd_in = ini_file();
     int fd_out = init(argc, argv);
-    int max = BUF_SIZE;             // leave room for a null
-    char *in = inbuf;
-    outbuf[0] = 0;                  // for repeat command
-    int flush = 0;
-    if (fd_in) {
+    int fd_stdin = dup(STDIN_FILENO);
+    char *input;
+
+    if (fd_in > 0) {
         printf("macro: reading commands from \"macro.ini\"\n\n");
+        
+    } else {
+        fd_in = 0 ;
     }
+    
+
     while (1) {
-        int count = read(fd_in, in, 1);
-        if (pid == 0) {
-            printf("macro: %s is no longer running, exiting...\n", program);
+
+        if ( fd_in > 0 ) {
+            dup2(fd_in, STDIN_FILENO);
+        }
+
+        // Use readline to get user input
+        input = readline("> "); // Prompt for input
+
+        if ( input == NULL  && fd_in > 0) { // Handle EOF (Ctrl+D)
+            dup2(fd_stdin, STDIN_FILENO);
+            close(fd_in);
+            fd_in = 0;
+            continue ;
+        } else if (input == NULL ) { // Handle EOF (Ctrl+D)
+            printf("macro: EOF, exiting...\n");
             break;
         }
-        if (count == -1) {
-            if (errno == EINTR) {
-                if (verbose) {
-                    fprintf(stderr, "macro: EINTR\n");
-                }
+        // printf("len: %d\n", strlen(input));
+        // printf("Input :'%s'\n", input);
+
+
+        // Check if the program is still running
+        if (pid == 0) {
+            printf("macro: %s is no longer running, exiting...\n", program);
+            free(input); // Free the input buffer
+            break;
+        }
+
+        size_t raw_input_len = strlen(input);
+
+        if ( raw_input_len == 0 ) {
+            HIST_ENTRY **hist_list = history_list();
+            int history_count = history_length;
+
+            if (history_count > 0) {
+                // if input is just <enter> free here
+                // Get the latest entry
+                HIST_ENTRY *latest_entry = hist_list[history_count - 1];
+                free(input);
+                input = strdup(latest_entry->line);
             } else {
-                char *err = strerror(errno);
-                fprintf(stderr, "macro: error reading from stdin: %s\n", err);
-                break;
-            }
-        } else if (count == 0) {
-            if (fd_in != 0) {                   // reading from ini file?
-                close(fd_in);                   // close ini file
-                fd_in = 0;                      // switch to stdin
-                outbuf[0] = 0;                  // reset repeat mechanism
-            } else {
-                printf("macro: EOF, exiting...\n");
-                break;
-            }
-        } else if (*in == '\n') {
-            if (!flush) {
-                *in = 0;                        // null terminate
-                //
-                // If the input line is blank and there was a last line
-                // in outbuf and the repeat option is not turned off,
-                // then resend the last command from outbuf.
-                //
-                if (!*inbuf) {
-                    int len;
-                    if (!*outbuf || repeat_off) {
-                        outbuf[0] = '\n';
-                        outbuf[1] = 0;
-                        len = 1;
-                        if (verbose) {
-                            printf("macro: sending newline (1 byte)");
-                        }
-                    } else {
-                        len = strlen(outbuf);
-                        if (verbose) {
-                            printf("macro: resending last command (%d bytes): %s", len, outbuf);
-                        }
-                    }
-                    int sent = write(fd_out, outbuf, len);
-                    if (sent != len) {
-                        fprintf(stderr, "macro: incomplete send, exiting...\n");
-                        break;
-                    }
-                } else {
-                    // if processing the "macro.ini" file and the
-                    // line starts with a "#", ignore the line.
-                    if (fd_in && (*inbuf == '#')) {
-                        if (verbose) {
-                            printf("macro: skipping \"macro.ini\" comment: \"%s\"\n", inbuf);
-                        }
-                        max = BUF_SIZE;
-                        in = inbuf;
-                        continue;
-                    }
-                    int rlen = 0;                   // length of remainder of line
-                    char *rest = strchr(inbuf, ' ');
-                    if (rest) {
-                        *rest++ = 0;                // null terminate command
-                        while (*rest == ' ') {
-                            rest++;
-                        }
-                        rlen = in - rest;
-                    } else {
-                        rest = in;                  // points to null character
-                        rlen = 0;
-                    }
-                    char *cmd = inbuf;
-                    if (verbose) {
-                        printf("macro: cmd=\"%s\"\n", cmd);
-                    }
-                    char *expand = alias_find(cmd);
-                    if (expand) {
-                        if (verbose) {
-                            printf("macro: alias_find expanded cmd=\"%s\" into \"%s\"\n", cmd, expand);
-                        }
-                        cmd = expand;
-                    }
-                    if (!strcmp("alias", cmd)) {
-                        if (verbose) {
-                            printf("macro: calling alias_add rest=\"%s\"\n", rest);
-                        }
-                        if (alias_add(rest)) {
-                            break;
-                        }
-                    } else if (!strcmp("unalias", cmd)) {
-                        if (verbose) {
-                            printf("macro: calling alias_del rest=\"%s\"\n", rest);
-                        }
-                        alias_del(rest);
-                    } else {
-                        int clen = strlen(cmd);
-                        if ((clen + rlen + 3) > BUF_SIZE) {        // 3=space plus newline plus null
-                            printf("macro: line too long, skipping...\n");
-                            max = BUF_SIZE;
-                            in = inbuf;
-                            continue;
-                        }
-                        memcpy(outbuf, cmd, clen);
-                        char *out = outbuf + clen;
-                        if (rlen) {
-                            *out++ = ' ';
-                            memcpy(out, rest, rlen);
-                            out += rlen;
-                        }
-                        *out++ = '\n';
-                        *out = 0;
-                        int len =  out - outbuf;
-                        if (verbose) {
-                            printf("macro: sending (%d bytes): %s", len, outbuf);
-                        }
-                        int sent = write(fd_out, outbuf, len);
-                        if (sent != len) {
-                            fprintf(stderr, "macro: incomplete send, exiting...\n");
-                            break;
-                        }
-                    }
-                }
-                // reset
-                max = BUF_SIZE;
-                in = inbuf;
-            } else {
-                flush = 0;
-            }
-        } else if (!flush) {
-            if (*in < ' ') {                // control codes to spaces
-                *in = ' ';
-            }
-            if ((*in != ' ') || (in != inbuf)) {    // ignore leading spaces
-                if (--max) {
-                    in++;
-                } else {
-                    fprintf(stderr, "macro: line too long, resetting input\n");
-                    flush = 1;
-                    max = BUF_SIZE;
-                    in = inbuf;
-                }
+                // if input is just <enter> free here
+                free(input);
+                continue;
             }
         }
+
+
+        // If input is not empty, add it to history
+        if (*input && raw_input_len != 0 && fd_in == 0 ) {
+            add_history(input);
+        }
+
+        // Process the input
+        if (!strcmp("exit", input)) {
+            free(input); // Free the input buffer
+            break; // Exit the loop
+        }
+
+        // Handle commands and aliases
+        char *cmd = strtok(input, " ");
+        char *rest = strtok(NULL, "");
+
+        if (verbose) {
+            printf("macro: cmd=\"%s\"\n", cmd);
+        }
+
+        char *expand = alias_find(cmd);
+        if (expand) {
+            if (verbose) {
+                printf("macro: alias_find expanded cmd=\"%s\" into \"%s\"\n", cmd, expand);
+            }
+            cmd = expand;
+        }
+
+        if (!strcmp("alias", cmd)) {
+            if (verbose) {
+                printf("macro: calling alias_add rest=\"%s\"\n", rest);
+            }
+            if (alias_add(rest)) {
+                free(input); // Free the input buffer
+                break;
+            }
+        } else if (!strcmp("unalias", cmd)) {
+            if (verbose) {
+                printf("macro: calling alias_del rest=\"%s\"\n", rest);
+            }
+            alias_del(rest);
+        } else {
+            // Prepare the output buffer
+            snprintf(outbuf, sizeof(outbuf), "%s %s\n", cmd, rest);
+            int len = strlen(outbuf);
+            if (verbose) {
+                printf("macro: sending (%d bytes): %s", len, outbuf);
+            }
+
+            int sent = write(fd_out, outbuf, len);
+            if (sent != len) {
+                fprintf(stderr, "macro: incomplete send, exiting...\n");
+                free(input); // Free the input buffer
+                break;
+            }
+        }
+
+        free(input); // Free the input buffer after processing
     }
     return 0;
 }
